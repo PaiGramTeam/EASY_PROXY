@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import FastAPI
 from httpx import (
@@ -10,9 +10,26 @@ from httpx import (
 )
 from starlette.requests import Request
 from starlette.responses import Response
+from env import proxy
 
 app = FastAPI()
-WHITE_LIST = ["mihoyo.com", "miyoushe.com"]
+WHITE_LIST = ["mihoyo.com", "miyoushe.com", "hoyolab.com", "hoyoverse.com"]
+
+
+async def req_client(method: str, target_url: str, headers, body, _proxy: Optional[str]) -> Response:
+    async with AsyncClient(timeout=120, follow_redirects=True, proxy=proxy) as client:
+        try:
+            async with client.stream(
+                method, target_url, headers=headers, data=body
+            ) as r:
+                headers = dict(r.headers)
+                r: HttpxResponse
+                _content = b"".join([part async for part in r.aiter_raw(1024 * 10)])
+                return Response(_content, headers=headers, status_code=r.status_code)
+        except (RemoteProtocolError, UnsupportedProtocol, ConnectError):
+            if _proxy is not None:
+                return await req_client(method, target_url, headers, body, None)
+            return Response(content="UnsupportedProtocol", status_code=400)
 
 
 def rewrite_headers(old_headers: Dict[str, str]) -> Dict[str, str]:
@@ -42,17 +59,7 @@ async def get_proxy(req: Request) -> Response:
         return Response(status_code=400, content=f"get request body info error: {e}")
     q = "?" + query if query else ""
     target_url = path + q
-    async with AsyncClient(timeout=120, follow_redirects=True) as client:
-        try:
-            async with client.stream(
-                method, target_url, headers=headers, data=body
-            ) as r:
-                headers = dict(r.headers)
-                r: HttpxResponse
-                _content = b"".join([part async for part in r.aiter_raw(1024 * 10)])
-                return Response(_content, headers=headers, status_code=r.status_code)
-        except (RemoteProtocolError, UnsupportedProtocol, ConnectError):
-            return Response(content="UnsupportedProtocol", status_code=400)
+    return await req_client(method, target_url, headers, body, proxy)
 
 
 app.add_route(
