@@ -13,7 +13,15 @@ from starlette.responses import Response
 from env import proxy
 
 app = FastAPI()
-WHITE_LIST = ["mihoyo.com", "miyoushe.com", "hoyolab.com", "hoyoverse.com", "api.kurobbs.com"]
+WHITE_LIST = [
+    "mihoyo.com", 
+    "miyoushe.com", 
+    "hoyolab.com", 
+    "hoyoverse.com", 
+    "api.kurobbs.com",
+    "hypergryph.com",
+    "skland.com",
+]
 
 
 async def req_client(method: str, target_url: str, headers, body, _proxy: Optional[str]) -> Response:
